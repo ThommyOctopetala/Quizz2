@@ -34,8 +34,8 @@ st.markdown(
 )
 
 # --- Chemins des fichiers CSV ---
-csv_path = os.path.expanduser("~/Desktop/Projet X/Androsace/final.csv")
-glossaire_csv_path = os.path.expanduser("~/Desktop/Projet X/Androsace/glossaire.csv")
+csv_path = os.path.expanduser("final.csv")
+glossaire_csv_path = os.path.expanduser("glossaire.csv")
 
 # --- Fonctions auxiliaires ---
 def get_genus(scientific_name):
