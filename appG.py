@@ -99,29 +99,23 @@ mode = st.sidebar.radio(
 )
 
 # Pour les modes d'entraînement, on permet de choisir le critère de travail
-training_type = None
-training_value = None  # Pour Famille ou Genre (filtré par Famille)
+training_type = None  # "Famille" ou "Genre"
+training_value = None  # Valeur sélectionnée pour le critère
 if mode in ["Entrainement facile", "Entrainement difficile"]:
-    training_type = st.sidebar.radio(
-        "S'entraîner sur :", 
-        ["Famille", "Genre"]
-    )
+    training_type = st.sidebar.radio("S'entraîner sur :", ["Famille", "Genre"])
     if training_type == "Famille":
         training_value = st.sidebar.selectbox(
             "Choisissez la famille :", 
             sorted(quiz_data["Famille"].unique())
         )
-    else:  # Entraînement sur Genre : d'abord on choisit la famille
+    else:  # Entraînement sur Genre
         training_family = st.sidebar.selectbox(
             "Choisissez la famille pour filtrer les genres :", 
             sorted(quiz_data["Famille"].unique())
         )
-        # Filtrer les genres disponibles dans la famille choisie
+        # On filtre les genres disponibles dans la famille choisie
         genres_disponibles = sorted(quiz_data[quiz_data["Famille"] == training_family]["Genus"].unique())
-        training_value = st.sidebar.selectbox(
-            "Choisissez le genre :", 
-            genres_disponibles
-        )
+        training_value = st.sidebar.selectbox("Choisissez le genre :", genres_disponibles)
 
 # --- Bouton Nouvelle Question ---
 if st.sidebar.button("Nouvelle Question"):
@@ -134,7 +128,7 @@ if st.sidebar.button("Nouvelle Question"):
                 if training_type == "Famille":
                     training_data = quiz_data[quiz_data["Famille"] == training_value]
                 else:  # training_type == "Genre"
-                    # Ici, training_family est sélectionnée et training_value est le genre dans cette famille
+                    # Ici, training_family est la famille utilisée pour filtrer, et training_value le genre
                     training_data = quiz_data[(quiz_data["Famille"] == training_family) & (quiz_data["Genus"] == training_value)]
                 if training_data.empty:
                     st.sidebar.error(f"Aucune plante trouvée pour {training_type} sélectionné(e).")
@@ -159,17 +153,14 @@ if st.sidebar.button("Nouvelle Question"):
             "url": quiz_row.get("URL", "")
         }
         
-        # Si le mode choisi n'est pas exclusivement basé sur le critère entraînement,
-        # la question se fait sur le nom scientifique complet
+        # Pour les modes basés sur le nom scientifique complet
         if mode in ["Facile", "Difficile", "Extrêmement difficile"]:
             q["correct_species"] = (
                 quiz_row["Nom_scientifique"] 
                 if mode not in ["Extrêmement difficile"] 
                 else get_species_name(quiz_row["Nom_scientifique"])
             )
-
-            if mode in ["Facile"]:
-                # QCM pour la famille (pour le mode Facile)
+            if mode == "Facile":
                 available_families = list(set(quiz_data["Famille"].tolist()) - {quiz_row["Famille"]})
                 if len(available_families) >= 3:
                     fam_choices = random.sample(available_families, 3) + [quiz_row["Famille"]]
@@ -179,7 +170,6 @@ if st.sidebar.button("Nouvelle Question"):
                 q["family_choices"] = fam_choices
 
             if mode in ["Facile", "Difficile"]:
-                # Pour le nom scientifique complet
                 if mode == "Facile":
                     pool = quiz_data if mode == "Facile" else quiz_data[quiz_data["Famille"] == quiz_row["Famille"]]
                     corr = quiz_row["Nom_scientifique"]
@@ -204,40 +194,23 @@ if st.sidebar.button("Nouvelle Question"):
                     choices = [corr] + other_names
                     random.shuffle(choices)
                     q["species_choices"] = choices
-                    
-        # Pour les modes d'entraînement sur un critère spécifique (Famille ou Genre)
+        
+        # Pour les modes d'entraînement ("Entrainement facile", "Entrainement difficile")
+        # Que l'on s'entraîne sur "Famille" ou "Genre", la réponse attendue est le nom scientifique complet (espèce)
         if mode in ["Entrainement facile", "Entrainement difficile"]:
-            if training_type == "Genre":
-                # On travaille exclusivement sur le genre
-                q["correct_genus"] = quiz_row["Genus"]
-                if mode == "Entrainement facile":
-                    pool_genus = quiz_data["Genus"].unique().tolist()
-                    pool_genus = [g for g in pool_genus if g != q["correct_genus"]]
-                    if len(pool_genus) >= 3:
-                        genus_choices = random.sample(pool_genus, 3) + [q["correct_genus"]]
-                    else:
-                        genus_choices = pool_genus + [q["correct_genus"]]
-                    random.shuffle(genus_choices)
-                    q["genus_choices"] = genus_choices
-            else:
-                # Sinon, on conserve la préparation habituelle sur le nom scientifique complet
-                q["correct_species"] = (
-                    quiz_row["Nom_scientifique"] 
-                    if mode not in ["Extrêmement difficile"] 
-                    else get_species_name(quiz_row["Nom_scientifique"])
-                )
-                if mode == "Entrainement facile":
-                    pool = quiz_data[quiz_data["Famille"] == training_value]
-                    corr = quiz_row["Nom_scientifique"]
-                    available_species = pool[pool["Nom_scientifique"] != corr]["Nom_scientifique"].tolist()
-                    if len(available_species) >= 3:
-                        choices = random.sample(available_species, 3) + [corr]
-                    else:
-                        choices = available_species + [corr]
-                    random.shuffle(choices)
-                    q["species_choices"] = choices
+            q["correct_species"] = quiz_row["Nom_scientifique"]
+            if mode == "Entrainement facile":
+                # Ici, on propose uniquement des espèces parmi les données filtrées (training_data)
+                pool = training_data
+                corr = quiz_row["Nom_scientifique"]
+                available_species = pool[pool["Nom_scientifique"] != corr]["Nom_scientifique"].tolist()
+                if len(available_species) >= 3:
+                    choices = random.sample(available_species, 3) + [corr]
+                else:
+                    choices = available_species + [corr]
+                random.shuffle(choices)
+                q["species_choices"] = choices
 
-        # Stockage de la question en session
         st.session_state.question = q
         st.session_state.feedback = ""
         
@@ -281,130 +254,91 @@ if st.session_state.question is not None:
             st.image(img_url, width=600)
         with col2:
             st.markdown("#### Répondez à la question")
-            # Cas d'entraînement sur le Genre
-            if mode in ["Entrainement facile", "Entrainement difficile"] and training_type == "Genre":
-                if mode == "Entrainement facile":
-                    # QCM pour le genre
-                    genus_answer = st.radio("Choisissez le genre :", q.get("genus_choices", []), key="genus_radio")
-                else:  # Entrainement difficile
-                    genus_answer = st.text_input("Entrez le genre :", key="typed_genus")
-            else:
-                # Modes classiques sur le nom scientifique complet et éventuellement la famille
-                if q["mode"] in ["Facile", "Difficile", "Entrainement facile"]:
-                    species_answer = st.radio("Choisissez le nom scientifique :", q.get("species_choices", []), key="species_radio")
-                    if q["mode"] == "Facile":
-                        family_answer = st.radio("Choisissez la famille :", q.get("family_choices", []), key="family_radio")
-                    else:
-                        family_answer = q["correct_family"]
-                elif q["mode"] in ["Extrêmement difficile", "Entrainement difficile"]:
-                    species_answer = st.text_input("Entrez le genre et l'espèce (ex: Genus species) :", key="typed_species")
-                    if q["mode"] == "Extrêmement difficile":
-                        family_answer = st.text_input("Entrez la famille :", key="typed_family")
-                    else:
-                        family_answer = q["correct_family"]
+            # Pour tous les modes basés sur le nom scientifique, on propose la même interface
+            if q["mode"] in ["Facile", "Difficile", "Entrainement facile"]:
+                species_answer = st.radio("Choisissez le nom scientifique :", q.get("species_choices", []), key="species_radio")
+                if q["mode"] == "Facile":
+                    family_answer = st.radio("Choisissez la famille :", q.get("family_choices", []), key="family_radio")
+                else:
+                    family_answer = q["correct_family"]
+            elif q["mode"] in ["Extrêmement difficile", "Entrainement difficile"]:
+                species_answer = st.text_input("Entrez le genre et l'espèce (ex: Genus species) :", key="typed_species")
+                if q["mode"] == "Extrêmement difficile":
+                    family_answer = st.text_input("Entrez la famille :", key="typed_family")
+                else:
+                    family_answer = q["correct_family"]
 
             if st.button("Valider"):
                 mode_q = q["mode"]
                 feedback = ""
                 
-                if mode in ["Entrainement facile", "Entrainement difficile"] and training_type == "Genre":
-                    # Vérification du genre uniquement
-                    if mode_q == "Entrainement facile":
-                        if genus_answer == q["correct_genus"]:
-                            feedback += "<p class='feedback-correct'>✅ Genre correct !</p>"
-                            genus_points = 1
-                        else:
-                            feedback += (
-                                f"<p class='feedback-incorrect'>❌ Genre incorrect ! La bonne réponse était: {q['correct_genus']}</p>"
-                            )
-                            genus_points = 0
+                # Vérification du nom scientifique complet
+                if mode_q in ["Facile", "Difficile", "Entrainement facile"]:
+                    if species_answer == q["correct_species"]:
+                        feedback += "<p class='feedback-correct'>✅ Nom scientifique correct !</p>"
+                        species_points = 1
                     else:
-                        user_genus = genus_answer.lower().strip() if genus_answer else ""
-                        correct_genus = q["correct_genus"].lower().strip()
-                        if user_genus == correct_genus:
-                            feedback += "<p class='feedback-correct'>✅ Genre correct !</p>"
-                            genus_points = 1
+                        if get_genus(species_answer).lower() == get_genus(q["correct_species"]).lower():
+                            feedback += (
+                                f"<p class='feedback-correct'>⚠️ Genre correct, mais espèce incorrecte. La bonne réponse était: {q['correct_species']}</p>"
+                            )
+                            species_points = 0.5
                         else:
                             feedback += (
-                                f"<p class='feedback-incorrect'>❌ Genre incorrect ! La bonne réponse était: {q['correct_genus']}</p>"
+                                f"<p class='feedback-incorrect'>❌ Nom scientifique incorrect ! La bonne réponse était: {q['correct_species']}</p>"
                             )
-                            genus_points = 0
-                    st.session_state.total += 1
-                    st.session_state.score += genus_points
-                else:
-                    # Évaluation du nom scientifique complet
-                    if mode_q in ["Facile", "Difficile", "Entrainement facile"]:
-                        if species_answer == q["correct_species"]:
-                            feedback += "<p class='feedback-correct'>✅ Nom scientifique correct !</p>"
-                            species_points = 1
+                            species_points = 0
+                    if mode_q == "Facile":
+                        if family_answer == q["correct_family"]:
+                            feedback += "<p class='feedback-correct'>✅ Famille correcte !</p>"
+                            family_points = 1
                         else:
-                            if get_genus(species_answer).lower() == get_genus(q["correct_species"]).lower():
-                                feedback += (
-                                    f"<p class='feedback-correct'>⚠️ Genre correct, "
-                                    f"mais espèce incorrecte. La bonne réponse était: {q['correct_species']}</p>"
-                                )
-                                species_points = 0.5
-                            else:
-                                feedback += (
-                                    f"<p class='feedback-incorrect'>❌ Nom scientifique incorrect ! "
-                                    f"La bonne réponse était: {q['correct_species']}</p>"
-                                )
-                                species_points = 0
-                        if mode_q == "Facile":
-                            if family_answer == q["correct_family"]:
-                                feedback += "<p class='feedback-correct'>✅ Famille correcte !</p>"
-                                family_points = 1
-                            else:
-                                feedback += (
-                                    f"<p class='feedback-incorrect'>❌ Famille incorrecte ! "
-                                    f"La bonne réponse était: {q['correct_family']}</p>"
-                                )
-                                family_points = 0
-                        else:
+                            feedback += (
+                                f"<p class='feedback-incorrect'>❌ Famille incorrecte ! La bonne réponse était: {q['correct_family']}</p>"
+                            )
                             family_points = 0
-                        st.session_state.total += 1 if mode_q in ["Entrainement facile"] else 1
-                        if mode_q == "Facile":
-                            st.session_state.total += 1
-                        st.session_state.score += species_points + family_points
+                    else:
+                        family_points = 0
+                    st.session_state.total += 1 if mode_q in ["Entrainement facile"] else 1
+                    if mode_q == "Facile":
+                        st.session_state.total += 1
+                    st.session_state.score += species_points + family_points
 
-                    elif mode_q in ["Extrêmement difficile", "Entrainement difficile"]:
-                        user_species = species_answer.lower().strip()
-                        correct_species = q["correct_species"].lower().strip()
-                        if user_species == correct_species:
-                            feedback += "<p class='feedback-correct'>✅ Nom scientifique correct !</p>"
-                            species_points = 1
+                elif mode_q in ["Extrêmement difficile", "Entrainement difficile"]:
+                    user_species = species_answer.lower().strip()
+                    correct_species = q["correct_species"].lower().strip()
+                    if user_species == correct_species:
+                        feedback += "<p class='feedback-correct'>✅ Nom scientifique correct !</p>"
+                        species_points = 1
+                    else:
+                        if get_genus(user_species) == get_genus(correct_species):
+                            feedback += (
+                                f"<p class='feedback-correct'>⚠️ Genre correct, mais espèce incorrecte. La bonne réponse était: {q['correct_species']}</p>"
+                            )
+                            species_points = 0.5
                         else:
-                            if get_genus(user_species) == get_genus(correct_species):
-                                feedback += (
-                                    f"<p class='feedback-correct'>⚠️ Genre correct, "
-                                    f"mais espèce incorrecte. La bonne réponse était: {q['correct_species']}</p>"
-                                )
-                                species_points = 0.5
-                            else:
-                                feedback += (
-                                    f"<p class='feedback-incorrect'>❌ Nom scientifique incorrect ! "
-                                    f"La bonne réponse était: {q['correct_species']}</p>"
-                                )
-                                species_points = 0
-                        if mode_q == "Extrêmement difficile":
-                            user_family = family_answer.lower().strip()
-                            correct_family = q["correct_family"].lower().strip()
-                            if user_family == correct_family:
-                                feedback += "<p class='feedback-correct'>✅ Famille correcte !</p>"
-                                family_points = 1
-                            else:
-                                feedback += (
-                                    f"<p class='feedback-incorrect'>❌ Famille incorrecte ! "
-                                    f"La bonne réponse était: {q['correct_family']}</p>"
-                                )
-                                family_points = 0
+                            feedback += (
+                                f"<p class='feedback-incorrect'>❌ Nom scientifique incorrect ! La bonne réponse était: {q['correct_species']}</p>"
+                            )
+                            species_points = 0
+                    if mode_q == "Extrêmement difficile":
+                        user_family = family_answer.lower().strip()
+                        correct_family = q["correct_family"].lower().strip()
+                        if user_family == correct_family:
+                            feedback += "<p class='feedback-correct'>✅ Famille correcte !</p>"
+                            family_points = 1
                         else:
+                            feedback += (
+                                f"<p class='feedback-incorrect'>❌ Famille incorrecte ! La bonne réponse était: {q['correct_family']}</p>"
+                            )
                             family_points = 0
-                        if mode_q == "Extrêmement difficile":
-                            st.session_state.total += 2
-                        else:
-                            st.session_state.total += 1
-                        st.session_state.score += species_points + family_points
+                    else:
+                        family_points = 0
+                    if mode_q == "Extrêmement difficile":
+                        st.session_state.total += 2
+                    else:
+                        st.session_state.total += 1
+                    st.session_state.score += species_points + family_points
 
                 feedback += f"<p>Nom commun : {q['correct_common']}</p>"
                 feedback += f"<p>Taille : {q['taille_plante']}</p>"
@@ -436,9 +370,7 @@ if st.session_state.question is not None:
             if user_answer.lower().strip() == q["correct"].lower().strip():
                 st.session_state.feedback = "<p class='feedback-correct'>✅ Correct !</p>"
             else:
-                st.session_state.feedback = (
-                    f"<p class='feedback-incorrect'>❌ Incorrect, la bonne réponse était : {q['correct']}</p>"
-                )
+                st.session_state.feedback = f"<p class='feedback-incorrect'>❌ Incorrect, la bonne réponse était : {q['correct']}</p>"
             st.markdown("### Feedback")
             st.markdown(st.session_state.feedback, unsafe_allow_html=True)
 
