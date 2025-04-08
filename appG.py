@@ -63,7 +63,7 @@ def load_glossaire_data():
     return df
 
 quiz_data = load_quiz_data()
-# Création de la colonne Genus pour filtrer selon le genre si nécessaire
+# Calcul de la colonne Genus pour faciliter la sélection
 quiz_data["Genus"] = quiz_data["Nom_scientifique"].apply(get_genus)
 glossaire_data = load_glossaire_data()
 
@@ -98,40 +98,39 @@ mode = st.sidebar.radio(
     index=0
 )
 
-# Pour les modes d'entraînement, on donne le choix entre entraîner sur Famille ou sur Genre
-training_choice = None
-training_selection = None
+# Pour les modes d'entraînement, on permet de choisir le critère de travail
+training_type = None
+training_value = None
 if mode in ["Entrainement facile", "Entrainement difficile"]:
-    training_choice = st.sidebar.radio(
-        "Entraînement par :", 
+    training_type = st.sidebar.radio(
+        "S'entraîner sur :", 
         ["Famille", "Genre"]
     )
-    if training_choice == "Famille":
-        training_selection = st.sidebar.selectbox(
-            "Choisissez la famille pour l'entraînement :", 
+    if training_type == "Famille":
+        training_value = st.sidebar.selectbox(
+            "Choisissez la famille :", 
             sorted(quiz_data["Famille"].unique())
         )
-    else:  # Entraînement par Genre
-        training_selection = st.sidebar.selectbox(
-            "Choisissez le genre pour l'entraînement :", 
+    else:  # Entraînement sur Genre
+        training_value = st.sidebar.selectbox(
+            "Choisissez le genre :", 
             sorted(quiz_data["Genus"].unique())
         )
 
 # --- Bouton Nouvelle Question ---
 if st.sidebar.button("Nouvelle Question"):
     if mode in ["Facile", "Difficile", "Extrêmement difficile", "Entrainement facile", "Entrainement difficile"]:
-        # --- Quiz sur la flore botanique ---
+        # --- Sélection de la donnée d'entraînement selon le critère choisi ---
         if mode in ["Entrainement facile", "Entrainement difficile"]:
-            if not training_selection:
-                st.sidebar.warning("Veuillez choisir un critère pour l'entraînement.")
+            if not training_value:
+                st.sidebar.warning("Veuillez choisir une valeur pour l'entraînement.")
             else:
-                # Filtrage selon le choix : Famille ou Genre
-                if training_choice == "Famille":
-                    training_data = quiz_data[quiz_data["Famille"] == training_selection]
-                else:  # Genre
-                    training_data = quiz_data[quiz_data["Genus"] == training_selection]
+                if training_type == "Famille":
+                    training_data = quiz_data[quiz_data["Famille"] == training_value]
+                else:  # training_type == "Genre"
+                    training_data = quiz_data[quiz_data["Genus"] == training_value]
                 if training_data.empty:
-                    st.sidebar.error("Aucune plante trouvée pour ce choix.")
+                    st.sidebar.error(f"Aucune plante trouvée pour {training_type} sélectionné(e).")
                 else:
                     quiz_row = training_data.sample(1).iloc[0]
         else:
@@ -153,34 +152,28 @@ if st.sidebar.button("Nouvelle Question"):
             "url": quiz_row.get("URL", "")
         }
         
-        # Si on est en mode entraînement par Genre, la bonne réponse correspond au genre de la plante.
-        if mode in ["Entrainement facile", "Entrainement difficile"] and training_choice == "Genre":
-            q["correct_genus"] = get_genus(quiz_row["Nom_scientifique"])
-            # Pour le mode facile on peut proposer des choix multiples (QCM)
-            if mode == "Entrainement facile":
-                available_genus = list(training_data["Genus"].unique())
-                if q["correct_genus"] in available_genus:
-                    available_genus.remove(q["correct_genus"])
-                if len(available_genus) >= 3:
-                    genus_choices = random.sample(available_genus, 3) + [q["correct_genus"]]
-                else:
-                    genus_choices = available_genus + [q["correct_genus"]]
-                random.shuffle(genus_choices)
-                q["genus_choices"] = genus_choices
-        else:
-            # Sinon, on travaille sur le nom scientifique complet
+        # Si le mode choisi n'est pas exclusivement basé sur le critère entraînement (genre/famille), la question se fait sur le nom scientifique complet
+        if mode in ["Facile", "Difficile", "Extrêmement difficile"]:
             q["correct_species"] = (
                 quiz_row["Nom_scientifique"] 
-                if mode not in ["Extrêmement difficile", "Entrainement difficile"] 
+                if mode not in ["Extrêmement difficile"] 
                 else get_species_name(quiz_row["Nom_scientifique"])
             )
-            # Préparation des propositions (QCM) pour les modes Facile / Difficile / Entrainement facile
-            if mode in ["Facile", "Difficile", "Entrainement facile"]:
-                if mode in ["Facile", "Entrainement facile"]:
-                    pool = quiz_data if mode == "Facile" else (
-                        # En mode entraînement, on garde le filtre utilisé (famille ou genre)
-                        training_data
-                    )
+
+            if mode in ["Facile"]:
+                # QCM pour la famille (pour le mode Facile)
+                available_families = list(set(quiz_data["Famille"].tolist()) - {quiz_row["Famille"]})
+                if len(available_families) >= 3:
+                    fam_choices = random.sample(available_families, 3) + [quiz_row["Famille"]]
+                else:
+                    fam_choices = available_families + [quiz_row["Famille"]]
+                random.shuffle(fam_choices)
+                q["family_choices"] = fam_choices
+
+            if mode in ["Facile", "Difficile"]:
+                # Pour le nom scientifique complet
+                if mode == "Facile":
+                    pool = quiz_data if mode == "Facile" else quiz_data[quiz_data["Famille"] == quiz_row["Famille"]]
                     corr = quiz_row["Nom_scientifique"]
                     available_species = pool[pool["Nom_scientifique"] != corr]["Nom_scientifique"].tolist()
                     if len(available_species) >= 3:
@@ -189,15 +182,6 @@ if st.sidebar.button("Nouvelle Question"):
                         choices = available_species + [corr]
                     random.shuffle(choices)
                     q["species_choices"] = choices
-
-                    if mode == "Facile":
-                        available_families = list(set(quiz_data["Famille"].tolist()) - {quiz_row["Famille"]})
-                        if len(available_families) >= 3:
-                            fam_choices = random.sample(available_families, 3) + [quiz_row["Famille"]]
-                        else:
-                            fam_choices = available_families + [quiz_row["Famille"]]
-                        random.shuffle(fam_choices)
-                        q["family_choices"] = fam_choices
                 elif mode == "Difficile":
                     corr = quiz_row["Nom_scientifique"]
                     genus_corr = quiz_row["Genus"]
@@ -212,16 +196,41 @@ if st.sidebar.button("Nouvelle Question"):
                     choices = [corr] + other_names
                     random.shuffle(choices)
                     q["species_choices"] = choices
-
-                    available_families = list(set(quiz_data["Famille"].tolist()) - {quiz_row["Famille"]})
-                    if len(available_families) >= 3:
-                        fam_choices = random.sample(available_families, 3) + [quiz_row["Famille"]]
+                    
+        # Pour les modes d'entraînement sur un critère spécifique (Famille ou Genre)
+        if mode in ["Entrainement facile", "Entrainement difficile"]:
+            if training_type == "Genre":
+                # On travaille exclusivement sur le genre
+                q["correct_genus"] = quiz_row["Genus"]
+                if mode == "Entrainement facile":
+                    # Création de propositions de QCM pour le genre
+                    pool_genus = quiz_data["Genus"].unique().tolist()
+                    pool_genus = [g for g in pool_genus if g != q["correct_genus"]]
+                    if len(pool_genus) >= 3:
+                        genus_choices = random.sample(pool_genus, 3) + [q["correct_genus"]]
                     else:
-                        fam_choices = available_families + [quiz_row["Famille"]]
-                    random.shuffle(fam_choices)
-                    q["family_choices"] = fam_choices
+                        genus_choices = pool_genus + [q["correct_genus"]]
+                    random.shuffle(genus_choices)
+                    q["genus_choices"] = genus_choices
+            else:
+                # Sinon, on conserve la préparation habituelle sur le nom scientifique complet
+                q["correct_species"] = (
+                    quiz_row["Nom_scientifique"] 
+                    if mode not in ["Extrêmement difficile"] 
+                    else get_species_name(quiz_row["Nom_scientifique"])
+                )
+                if mode == "Entrainement facile":
+                    pool = quiz_data[quiz_data["Famille"] == training_value]
+                    corr = quiz_row["Nom_scientifique"]
+                    available_species = pool[pool["Nom_scientifique"] != corr]["Nom_scientifique"].tolist()
+                    if len(available_species) >= 3:
+                        choices = random.sample(available_species, 3) + [corr]
+                    else:
+                        choices = available_species + [corr]
+                    random.shuffle(choices)
+                    q["species_choices"] = choices
 
-        # Stockage de la question dans la session
+        # Stockage de la question en session
         st.session_state.question = q
         st.session_state.feedback = ""
         
@@ -265,16 +274,16 @@ if st.session_state.question is not None:
             st.image(img_url, width=600)
         with col2:
             st.markdown("#### Répondez à la question")
-            # Cas entraînement par Genre
-            if mode in ["Entrainement facile", "Entrainement difficile"] and training_choice == "Genre":
+            # Cas d'entraînement sur le Genre
+            if mode in ["Entrainement facile", "Entrainement difficile"] and training_type == "Genre":
                 if mode == "Entrainement facile":
+                    # QCM pour le genre
                     genus_answer = st.radio("Choisissez le genre :", q.get("genus_choices", []), key="genus_radio")
-                else:
+                else:  # Entrainement difficile
                     genus_answer = st.text_input("Entrez le genre :", key="typed_genus")
-                # La famille est déjà imposée via le choix en sidebar
-                family_answer = q["correct_family"]
+                # La comparaison se fera sur le genre uniquement
             else:
-                # Pour les autres modes, on travaille sur le nom scientifique
+                # Modes classiques sur le nom scientifique complet et éventuellement la famille
                 if q["mode"] in ["Facile", "Difficile", "Entrainement facile"]:
                     species_answer = st.radio("Choisissez le nom scientifique :", q.get("species_choices", []), key="species_radio")
                     if q["mode"] == "Facile":
@@ -292,8 +301,8 @@ if st.session_state.question is not None:
                 mode_q = q["mode"]
                 feedback = ""
                 
-                # Traitement pour l'entraînement sur le Genre
-                if mode in ["Entrainement facile", "Entrainement difficile"] and training_choice == "Genre":
+                if mode in ["Entrainement facile", "Entrainement difficile"] and training_type == "Genre":
+                    # Vérification du genre uniquement
                     if mode_q == "Entrainement facile":
                         if genus_answer == q["correct_genus"]:
                             feedback += "<p class='feedback-correct'>✅ Genre correct !</p>"
@@ -316,9 +325,8 @@ if st.session_state.question is not None:
                             genus_points = 0
                     st.session_state.total += 1
                     st.session_state.score += genus_points
-                
                 else:
-                    # Traitement pour les autres modes (nom scientifique complet)
+                    # Évaluation du nom scientifique complet
                     if mode_q in ["Facile", "Difficile", "Entrainement facile"]:
                         if species_answer == q["correct_species"]:
                             feedback += "<p class='feedback-correct'>✅ Nom scientifique correct !</p>"
@@ -336,7 +344,6 @@ if st.session_state.question is not None:
                                     f"La bonne réponse était: {q['correct_species']}</p>"
                                 )
                                 species_points = 0
-
                         if mode_q == "Facile":
                             if family_answer == q["correct_family"]:
                                 feedback += "<p class='feedback-correct'>✅ Famille correcte !</p>"
@@ -349,7 +356,6 @@ if st.session_state.question is not None:
                                 family_points = 0
                         else:
                             family_points = 0
-
                         st.session_state.total += 1 if mode_q in ["Entrainement facile"] else 1
                         if mode_q == "Facile":
                             st.session_state.total += 1
@@ -374,7 +380,6 @@ if st.session_state.question is not None:
                                     f"La bonne réponse était: {q['correct_species']}</p>"
                                 )
                                 species_points = 0
-
                         if mode_q == "Extrêmement difficile":
                             user_family = family_answer.lower().strip()
                             correct_family = q["correct_family"].lower().strip()
@@ -389,7 +394,6 @@ if st.session_state.question is not None:
                                 family_points = 0
                         else:
                             family_points = 0
-
                         if mode_q == "Extrêmement difficile":
                             st.session_state.total += 2
                         else:
