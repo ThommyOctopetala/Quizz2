@@ -100,7 +100,7 @@ mode = st.sidebar.radio(
 
 # Pour les modes d'entraînement, on permet de choisir le critère de travail
 training_type = None
-training_value = None
+training_value = None  # Pour Famille ou Genre (filtré par Famille)
 if mode in ["Entrainement facile", "Entrainement difficile"]:
     training_type = st.sidebar.radio(
         "S'entraîner sur :", 
@@ -111,10 +111,16 @@ if mode in ["Entrainement facile", "Entrainement difficile"]:
             "Choisissez la famille :", 
             sorted(quiz_data["Famille"].unique())
         )
-    else:  # Entraînement sur Genre
+    else:  # Entraînement sur Genre : d'abord on choisit la famille
+        training_family = st.sidebar.selectbox(
+            "Choisissez la famille pour filtrer les genres :", 
+            sorted(quiz_data["Famille"].unique())
+        )
+        # Filtrer les genres disponibles dans la famille choisie
+        genres_disponibles = sorted(quiz_data[quiz_data["Famille"] == training_family]["Genus"].unique())
         training_value = st.sidebar.selectbox(
             "Choisissez le genre :", 
-            sorted(quiz_data["Genus"].unique())
+            genres_disponibles
         )
 
 # --- Bouton Nouvelle Question ---
@@ -128,7 +134,8 @@ if st.sidebar.button("Nouvelle Question"):
                 if training_type == "Famille":
                     training_data = quiz_data[quiz_data["Famille"] == training_value]
                 else:  # training_type == "Genre"
-                    training_data = quiz_data[quiz_data["Genus"] == training_value]
+                    # Ici, training_family est sélectionnée et training_value est le genre dans cette famille
+                    training_data = quiz_data[(quiz_data["Famille"] == training_family) & (quiz_data["Genus"] == training_value)]
                 if training_data.empty:
                     st.sidebar.error(f"Aucune plante trouvée pour {training_type} sélectionné(e).")
                 else:
@@ -152,7 +159,8 @@ if st.sidebar.button("Nouvelle Question"):
             "url": quiz_row.get("URL", "")
         }
         
-        # Si le mode choisi n'est pas exclusivement basé sur le critère entraînement (genre/famille), la question se fait sur le nom scientifique complet
+        # Si le mode choisi n'est pas exclusivement basé sur le critère entraînement,
+        # la question se fait sur le nom scientifique complet
         if mode in ["Facile", "Difficile", "Extrêmement difficile"]:
             q["correct_species"] = (
                 quiz_row["Nom_scientifique"] 
@@ -203,7 +211,6 @@ if st.sidebar.button("Nouvelle Question"):
                 # On travaille exclusivement sur le genre
                 q["correct_genus"] = quiz_row["Genus"]
                 if mode == "Entrainement facile":
-                    # Création de propositions de QCM pour le genre
                     pool_genus = quiz_data["Genus"].unique().tolist()
                     pool_genus = [g for g in pool_genus if g != q["correct_genus"]]
                     if len(pool_genus) >= 3:
@@ -281,7 +288,6 @@ if st.session_state.question is not None:
                     genus_answer = st.radio("Choisissez le genre :", q.get("genus_choices", []), key="genus_radio")
                 else:  # Entrainement difficile
                     genus_answer = st.text_input("Entrez le genre :", key="typed_genus")
-                # La comparaison se fera sur le genre uniquement
             else:
                 # Modes classiques sur le nom scientifique complet et éventuellement la famille
                 if q["mode"] in ["Facile", "Difficile", "Entrainement facile"]:
