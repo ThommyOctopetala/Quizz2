@@ -241,7 +241,7 @@ if st.session_state.question is not None:
     if "images" in q:
         with col1:
             img_url = q["images"][st.session_state.current_img_index]
-            st.image(img_url, width=300)
+            st.image(img_url, width=600)
         with col2:
             st.markdown("#### Répondez à la question")
             if q["mode"] in ["Facile", "Difficile", "Entrainement facile"]:
@@ -373,13 +373,13 @@ if st.session_state.question is not None:
             st.markdown("### Définition")
             st.write(q["definition"])
             if pd.notna(q["image"]) and q["image"] != "":
-                st.image(q["image"], width=300)
+                st.image(q["image"], width=600)
             user_answer = st.text_input("Quel est le terme ?", key="glossaire_answer")
         elif q["mode"] == "Glossaire : terme → définition":
             st.markdown("### Terme")
             st.write(q["terme"])
             if pd.notna(q["image"]) and q["image"] != "":
-                st.image(q["image"], width=300)
+                st.image(q["image"], width=600)
             user_answer = st.text_input("Quelle est la définition ?", key="glossaire_answer")
         
         if st.button("Valider"):
