@@ -30,7 +30,7 @@ Développée avec [Streamlit](https://streamlit.io)
 
 ## 🖼️ Exemple d’interface
 
-![Aperçu de l'application](images/appli-botanique-preview.png)  
+![Aperçu de l'application](images/test.png)  
 *Exemple d’un quiz d’identification avec filtres par genre/famille*
 
 ---
